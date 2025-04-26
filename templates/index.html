@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Simple Blog</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Recent Posts</h1>
+    <ul>
+        {% for post in posts %}
+        <li><a href="/post/{{ post.filename }}">{{ post.filename[:-3] | replace('_', ' ') | title }}</a></li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
