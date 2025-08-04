@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard - My Simple Blog</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="admin-container">
+        <header class="admin-header">
+            <h1>Admin Dashboard</h1>
+            <nav class="admin-nav">
+                <a href="{{ url_for('index') }}">View Blog</a>
+                <a href="{{ url_for('logout') }}">Logout</a>
+            </nav>
+        </header>
+        
+        <div class="admin-content">
+            <h2>Welcome, {{ current_user.username }}!</h2>
+            <p>This is your admin dashboard. Future admin features will be added here.</p>
+            
+            <div class="admin-stats">
+                <h3>Blog Statistics</h3>
+                <p>Total Posts: {{ posts|length if posts else 0 }}</p>
+            </div>
+            
+            <div class="admin-actions">
+                <h3>Quick Actions</h3>
+                <p>Admin features coming soon:</p>
+                <ul>
+                    <li>Create new blog posts</li>
+                    <li>Edit existing posts</li>
+                    <li>Delete posts</li>
+                    <li>Manage categories</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 
