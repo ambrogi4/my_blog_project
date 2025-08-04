@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import os
 import markdown
-from models import User
+from models import User, BlogPost
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Change this in production!
@@ -23,25 +23,37 @@ def load_user(user_id):
         return User.get_user()
     return None
 
-def get_blog_posts():
+def get_blog_posts(include_archived=False):
+    """Get all blog posts, optionally including archived ones"""
     posts = []
+    
+    # Get active posts
     for filename in os.listdir(BLOG_POSTS_FOLDER):
         if filename.endswith('.md'):
-            # For simplicity, we'll just store the filename for now
-            posts.append({'filename': filename})
+            post = BlogPost.from_filename(filename)
+            if post:
+                posts.append(post)
+    
+    # Get archived posts if requested
+    if include_archived:
+        archived_dir = os.path.join(BLOG_POSTS_FOLDER, 'archived')
+        if os.path.exists(archived_dir):
+            for filename in os.listdir(archived_dir):
+                if filename.endswith('.md'):
+                    post = BlogPost.from_filename(f"archived/{filename}")
+                    if post:
+                        posts.append(post)
+    
     return posts
 
 def get_blog_post_content(filename):
-    filepath = os.path.join(BLOG_POSTS_FOLDER, filename)
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
-        return None
+    """Get blog post content by filename"""
+    post = BlogPost.from_filename(filename)
+    return post.content if post else None
 
 @app.route('/')
 def index():
-    posts = get_blog_posts()
+    posts = get_blog_posts(include_archived=False)  # Only show active posts to public
     return render_template('index.html', posts=posts)
 
 @app.route('/post/<filename>')
@@ -80,9 +92,129 @@ def logout():
 @app.route('/admin')
 @login_required
 def admin():
-    """Admin dashboard - placeholder for future admin features"""
-    posts = get_blog_posts()
+    """Admin dashboard with all posts including archived"""
+    posts = get_blog_posts(include_archived=True)
     return render_template('admin.html', posts=posts)
+
+@app.route('/admin/new', methods=['GET', 'POST'])
+@login_required
+def new_post():
+    """Create a new blog post"""
+    if request.method == 'POST':
+        title = request.form.get('title')
+        content = request.form.get('content')
+        
+        if title and content:
+            # Create filename from title
+            filename = title.lower().replace(' ', '_').replace('-', '_') + '.md'
+            
+            # Check if file already exists
+            if os.path.exists(os.path.join(BLOG_POSTS_FOLDER, filename)):
+                flash('A post with this title already exists!', 'error')
+                return render_template('edit_post.html', title=title, content=content)
+            
+            # Create and save the post
+            post = BlogPost(filename, title, content)
+            post.save()
+            
+            flash('Post created successfully!', 'success')
+            return redirect(url_for('admin'))
+        else:
+            flash('Title and content are required!', 'error')
+    
+    return render_template('edit_post.html', title='', content='')
+
+@app.route('/admin/edit/<filename>', methods=['GET', 'POST'])
+@login_required
+def edit_post(filename):
+    """Edit an existing blog post"""
+    post = BlogPost.from_filename(filename)
+    
+    if not post:
+        flash('Post not found!', 'error')
+        return redirect(url_for('admin'))
+    
+    if request.method == 'POST':
+        title = request.form.get('title')
+        content = request.form.get('content')
+        
+        if title and content:
+            # Update the post
+            post.title = title
+            post.content = content
+            
+            # Handle filename change if title changed
+            new_filename = title.lower().replace(' ', '_').replace('-', '_') + '.md'
+            if new_filename != post.filename:
+                # Check if new filename already exists
+                if os.path.exists(os.path.join(BLOG_POSTS_FOLDER, new_filename)):
+                    flash('A post with this title already exists!', 'error')
+                    return render_template('edit_post.html', title=title, content=content, filename=filename)
+                
+                # Delete old file and update filename
+                post.delete()
+                post.filename = new_filename
+            
+            post.save()
+            flash('Post updated successfully!', 'success')
+            return redirect(url_for('admin'))
+        else:
+            flash('Title and content are required!', 'error')
+    
+    return render_template('edit_post.html', title=post.title, content=post.content, filename=filename)
+
+@app.route('/admin/archive/<filename>')
+@login_required
+def archive_post(filename):
+    """Archive a blog post"""
+    post = BlogPost.from_filename(filename)
+    
+    if not post:
+        flash('Post not found!', 'error')
+        return redirect(url_for('admin'))
+    
+    if post.is_archived:
+        flash('Post is already archived!', 'error')
+    else:
+        post.archive()
+        flash('Post archived successfully!', 'success')
+    
+    return redirect(url_for('admin'))
+
+@app.route('/admin/unarchive/<filename>')
+@login_required
+def unarchive_post(filename):
+    """Unarchive a blog post"""
+    post = BlogPost.from_filename(filename)
+    
+    if not post:
+        flash('Post not found!', 'error')
+        return redirect(url_for('admin'))
+    
+    if not post.is_archived:
+        flash('Post is not archived!', 'error')
+    else:
+        post.unarchive()
+        flash('Post unarchived successfully!', 'success')
+    
+    return redirect(url_for('admin'))
+
+@app.route('/admin/delete/<filename>')
+@login_required
+def delete_post(filename):
+    """Delete a blog post"""
+    post = BlogPost.from_filename(filename)
+    
+    if not post:
+        flash('Post not found!', 'error')
+        return redirect(url_for('admin'))
+    
+    if post.delete():
+        flash('Post deleted successfully!', 'success')
+    else:
+        flash('Failed to delete post!', 'error')
+    
+    return redirect(url_for('admin'))
 
 if __name__ == '__main__':
     app.run(debug=True)
